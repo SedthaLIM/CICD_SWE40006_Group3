@@ -7,14 +7,11 @@ trigger:
 
 variables:
 
-  # Azure Resource Manager connection created during pipeline creation.
-  azure_subscription: '8e58ce36-fb51-49bb-95d2-05792f0f6ea6'
+  # Azure Resource Manager connection.
+  azure_subscription: 'azure_service_conn_factorial_php'
 
-  # Name of the CI web app.
-  web_app_name_ci: 'factorial-calculator-ci'
-
-  # Name of the production web app.
-  web_app_name_prod: 'factorial-calculator'
+  # Name of the ci server (Azure App Service).
+  web_app_name: 'factorial-calculator-ci'
 
   # Agent VM image name
   vm_image_name: 'ubuntu-latest'
@@ -46,7 +43,6 @@ stages:
         php -version
       workingDirectory: $(root_folder)
       displayName: 'Use PHP version $(phpVersion)'
-
     - task: ArchiveFiles@2
       displayName: 'Archive files'
       inputs:
@@ -59,8 +55,8 @@ stages:
       displayName: 'Upload package'
       artifact: drop
 
-- stage: DeployToCI
-  displayName: 'Deploy Web App to CI Server.'
+- stage: Deploy
+  displayName: 'Deploy Web App'
   dependsOn: Build
   condition: succeeded()
   jobs:
@@ -73,10 +69,10 @@ stages:
         deploy:
           steps:
           - task: AzureWebApp@1
-            displayName: 'Deploy Azure Web App : factorial-calculator-ci'
+            displayName: 'Deploy Azure Web App : factorial-php'
             inputs:
               azureSubscription: $(azure_subscription)
-              appName: $(web_app_name_ci)
+              appName: $(web_app_name)
               package: $(Pipeline.Workspace)/drop/$(Build.BuildId).zip
 
 # Run tests on the web app that was just deployed to the CI server.
@@ -84,10 +80,10 @@ stages:
 # https://www.codewrecks.com/post/old/2018/11/run-python-test-with-azure-devops-pipeline/
 # https://learn.microsoft.com/en-us/azure/devops/pipelines/ecosystems/python?view=azure-devops
 - stage: Test
-  displayName: 'Test Web App.'
+  displayName: 'Test Web App'
 
   # Testing can only occur if the web app was succeessfully deployed to CI server.
-  dependsOn: DeployToCI
+  dependsOn: Deploy
   condition: succeeded()
 
   jobs:
@@ -107,7 +103,6 @@ stages:
     - script: |
         google-chrome --version
       displayName: 'Check Google Chrome Version.'
-
     # Download Chrome Driver (necessary for Selenium).
     - script: |
         pwd
@@ -140,24 +135,3 @@ stages:
       inputs:
         testResultsFiles: '$(root_folder)/test/test_results.xml'
         testRunTitle: 'Publish test results.'
-
-# Deploy the web app to prod server (hasn't been made yet).
-- stage: DeployToProd
-  displayName: 'Deploy Web App to Production Server.'
-  dependsOn: Test
-  condition: succeeded()
-  jobs:
-  - deployment: DeploymentJob
-    pool:
-      vmImage: $(vm_image_name)
-    environment: $(environment_name)
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: AzureWebApp@1
-            displayName: 'Deploy Azure Web App : factorial-calculator'
-            inputs:
-              azureSubscription: $(azure_subscription)
-              appName: $(web_app_name_prod)
-              package: $(Pipeline.Workspace)/drop/$(Build.BuildId).zip
